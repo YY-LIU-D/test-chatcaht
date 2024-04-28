@@ -17,6 +17,9 @@ class ConversationBufferDBMemory(BaseChatMemory):
     max_token_limit: int = 2000
     message_limit: int = 10
 
+    def relevance_score(self, message: Dict, current_input: str) -> float:
+        return current_input in message['query']  # 关键词匹配的relevance score
+
     @property
     def buffer(self) -> List[BaseMessage]:
         """String buffer of memory."""
@@ -25,6 +28,11 @@ class ConversationBufferDBMemory(BaseChatMemory):
         messages = filter_message(conversation_id=self.conversation_id, limit=self.message_limit)
         # 返回的记录按时间倒序，转为正序
         messages = list(reversed(messages))
+
+        # Score messages and filter
+        scored_messages = [(message, self.relevance_score(message, self.current_input)) for message in messages]
+        relevant_messages = [msg for msg, score in scored_messages if score > 0.5]  # Threshold is an example
+
         chat_messages: List[BaseMessage] = []
         for message in messages:
             chat_messages.append(HumanMessage(content=message["query"]))
@@ -33,7 +41,7 @@ class ConversationBufferDBMemory(BaseChatMemory):
         if not chat_messages:
             return []
 
-        # prune the chat message if it exceeds the max token limit
+        # 如果当前的对话消息超出了设置的max token limit2000字，就移除旧的消息直到总长度不超过限制。
         curr_buffer_length = self.llm.get_num_tokens(get_buffer_string(chat_messages))
         if curr_buffer_length > self.max_token_limit:
             pruned_memory = []
